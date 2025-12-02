@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import os
 import pathlib
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -42,8 +43,8 @@ height: 50%;
 
 """
 
-    def __init__(self, title, cmd_text, script_text):
-        super().__init__(title)
+    def __init__(self, title, cmd_text, script_text, id):
+        super().__init__(title, id=id)
         self.scratch_dir = pathlib.Path(tempfile.mkdtemp())
         self.cmd_file = self.scratch_dir / "run"
         self.script_file = self.scratch_dir / "in.txt"
@@ -51,6 +52,10 @@ height: 50%;
 
         self.cmd_text = cmd_text
         self.script_text = script_text
+
+    def __del__(self):
+        if self.scratch_dir.exists():
+            shutil.rmtree(self.scratch_dir)
 
     def compose(self):
         self._debounce_time = 0.5
@@ -97,36 +102,52 @@ height: 50%;
 
     @on(Input.Blurred, "#input-file-input")
     @on(Input.Submitted, "#input-file-input")
-    def set_input_file(self, event):
-        self.script_file = pathlib.Path(event.input.value)
+    def _set_input_file(self, event):
+        self.set_input_file(event.input.value)
+
+    @on(Input.Blurred, "#cmd-file-input")
+    @on(Input.Submitted, "#cmd-file-input")
+    def _set_cmd_file(self, event):
+        self.set_cmd_file(event.input.value)
+
+    @on(Input.Blurred, "#output-file-input")
+    @on(Input.Submitted, "#output-file-input")
+    def _set_output_file(self, event):
+        self.set_output_file(event.input.value)
+
+    def set_input_file(self, filename):
+        self.script_file = pathlib.Path(filename)
         if not self.script_file.exists():
             self.script_file.write_text(self.script_text)
         else:
             self.script_text = self.script_file.read_text()
         self.query_one("#input-window").text = self.script_text
+        self.query_one("#input-file-input").value = str(self.script_file)
         self._debounce_timer.reset()
 
-    @on(Input.Blurred, "#cmd-file-input")
-    @on(Input.Submitted, "#cmd-file-input")
-    def set_cmd_file(self, event):
-        self.cmd_file = pathlib.Path(event.input.value)
+    def set_cmd_file(self, filename):
+        self.cmd_file = pathlib.Path(fielname)
         if not self.cmd_file.exists():
             self.cmd_file.write_text(self.cmd_text)
         else:
             self.cmd_text = self.cmd_file.read_text()
         self.query_one("#cmd-window").text = self.cmd_text
+        self.query_one("#cmd-file-input").value = str(self.cmd_file)
         self._debounce_timer.reset()
 
-    @on(Input.Blurred, "#output-file-input")
-    @on(Input.Submitted, "#output-file-input")
-    def set_output_file(self, event):
-        self.graphic_file = pathlib.Path(event.input.value)
+    def set_output_file(self, filename):
+        self.graphic_file = pathlib.Path(filename)
+        self.query_one("#output-file-input").value = str(self.graphic_file)
         self._debounce_timer.reset()
 
     def set_graphic(self, file):
         self.query_one("#graphic-window").image = file
 
     @on(TextArea.Changed, "#input-window")
+    def reset_debounce_timer(self, event):
+        self._debounce_timer.reset()
+
+    @on(TextArea.Changed, "#cmd-window")
     def reset_debounce_timer(self, event):
         self._debounce_timer.reset()
 
@@ -188,37 +209,51 @@ IMAGE_FILE="${2}"
 
 
 class PviewApp(App):
-    def __init__(
-        self,
-    ):
+    def __init__(self, filename):
         super().__init__()
-        self.scratch_dir = pathlib.Path(tempfile.mkdtemp())
-        self.cmd_file = self.scratch_dir / "run"
-        self.script_file = self.scratch_dir / "in.txt"
-        self.graphic_file = self.scratch_dir / "out.png"
-
-        self.cmd_text = None
-        self.script_text = None
+        self.filename = pathlib.Path(filename) if filename is not None else None
 
     def compose(self):
         self._debounce_time = 0.5
         self._debounce_timer: Timer | None = None
         yield Header()
         with TabbedContent():
-            with AppTab("gnuplot", cmds["gnuplot"], "plot sin(x)"):
+            with AppTab("gnuplot", cmds["gnuplot"], "plot sin(x)", id="gnuplot-tab"):
                 pass
-            with AppTab("tex2im", cmds["tex2im"], r"\div{\vec{E}} = \rho / \epsilon_0"):
+            with AppTab(
+                "tex2im",
+                cmds["tex2im"],
+                r"\div{\vec{E}} = \rho / \epsilon_0",
+                id="tex2im-tab",
+            ):
                 pass
+            with AppTab(
+                "custom",
+                cmds["custom"],
+                r"Edit command script to process this file and then edit this file.",
+                id="custom-tab",
+            ):
+                pass
+
+    def on_mount(self):
+        if self.filename is not None:
+            if self.filename.suffix in [".gp", ".gnuplot"]:
+                self.query_one("#gnuplot-tab").set_input_file(self.filename)
+                self.query_one(TabbedContent).active = "gnuplot-tab"
+
+            if self.filename.suffix in [".tex"]:
+                self.query_one("#tex2im-tab").set_input_file(self.filename)
+                self.query_one(TabbedContent).active = "tex2im-tab"
 
 
 def main() -> None:
-    # parser = argparse.ArgumentParser(
-    #     prog="pview",
-    #     description="Edit scripts for generating graphics and see the results in real-time.",
-    # )
-    # parser.add_argument("filename")
+    parser = argparse.ArgumentParser(
+        prog="pview",
+        description="Edit scripts for generating graphics and see the results in real-time.",
+    )
+    parser.add_argument("filename", nargs="?")
 
-    # args = parser.parse_args()
+    args = parser.parse_args()
 
-    app = PviewApp()
+    app = PviewApp(args.filename)
     app.run()
