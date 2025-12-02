@@ -1,0 +1,30 @@
+[build-system]
+build-backend = "hatchling.build"
+requires = [ "hatchling" ]
+
+[project]
+name = "pview"
+version = "0.1.0"
+description = "Preview various kinds of text files used to generate images."
+readme = "README.md"
+authors = [
+  { email = "clifton.clark@gmail.com" },
+]
+requires-python = ">=3.12"
+classifiers = [
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+  "textual>=6.7",
+  "textual-image>=0.8.4",
+]
+
+scripts.pview = "pview:main"
+
+[dependency-groups]
+dev = [
+  "textual-dev>=1.8",
+]

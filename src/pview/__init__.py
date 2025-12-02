@@ -1,0 +1,224 @@
+import argparse
+import asyncio
+import os
+import pathlib
+import stat
+import subprocess
+import tempfile
+
+from textual import log, on, work
+from textual.app import App
+from textual.containers import (
+    Container,
+    Horizontal,
+    HorizontalGroup,
+    Vertical,
+    VerticalGroup,
+)
+from textual.timer import Timer
+from textual.widgets import (
+    Collapsible,
+    Footer,
+    Header,
+    Input,
+    Label,
+    Markdown,
+    Static,
+    TabbedContent,
+    TabPane,
+    TextArea,
+)
+from textual_image.widget import AutoImage
+
+
+class AppTab(TabPane):
+    DEFAULT_CSS = """
+AppTab {
+AutoImage {
+width: auto;
+height: 50%;
+}
+}
+
+"""
+
+    def __init__(self, title, cmd_text, script_text):
+        super().__init__(title)
+        self.scratch_dir = pathlib.Path(tempfile.mkdtemp())
+        self.cmd_file = self.scratch_dir / "run"
+        self.script_file = self.scratch_dir / "in.txt"
+        self.graphic_file = self.scratch_dir / "out.png"
+
+        self.cmd_text = cmd_text
+        self.script_text = script_text
+
+    def compose(self):
+        self._debounce_time = 0.5
+        self._debounce_timer: Timer | None = None
+        with Collapsible(title="Cmd"):
+            yield TextArea.code_editor(text="", id="cmd-window")
+
+        with Horizontal():
+            with Vertical():
+                yield Label("Script")
+                yield TextArea.code_editor(id="input-window")
+                with VerticalGroup():
+                    yield Label("Scatch Folder")
+                    yield Static(str(self.scratch_dir))
+                with VerticalGroup():
+                    yield Label("Input File")
+                    yield Input(id="input-file-input")
+                with VerticalGroup():
+                    yield Label("Output File")
+                    yield Input(id="output-file-input")
+                with VerticalGroup():
+                    yield Label("Cmd File")
+                    yield Input(id="cmd-file-input")
+            with Vertical():
+                yield Label("Graphic")
+                yield AutoImage(id="graphic-window", classes="width-auto height-auto")
+                yield Label("Output")
+                yield TextArea(id="output-window")
+
+    def on_mount(self):
+        # if self.filepath.exists():
+        #     self.query_one("#input-window").text = self.filepath.read_text()
+
+        self._debounce_timer = Timer(
+            self, self._debounce_time, callback=self.generate_graphic
+        )
+        self._debounce_timer._start()
+
+        self.query_one("#cmd-window").text = self.cmd_text
+        self.query_one("#input-window").text = self.script_text
+        self.query_one("#input-file-input").value = str(self.script_file)
+        self.query_one("#output-file-input").value = str(self.graphic_file)
+        self.query_one("#cmd-file-input").value = str(self.cmd_file)
+
+    @on(Input.Blurred, "#input-file-input")
+    @on(Input.Submitted, "#input-file-input")
+    def set_input_file(self, event):
+        self.script_file = pathlib.Path(event.input.value)
+        if not self.script_file.exists():
+            self.script_file.write_text(self.script_text)
+        else:
+            self.script_text = self.script_file.read_text()
+        self.query_one("#input-window").text = self.script_text
+        self._debounce_timer.reset()
+
+    @on(Input.Blurred, "#cmd-file-input")
+    @on(Input.Submitted, "#cmd-file-input")
+    def set_cmd_file(self, event):
+        self.cmd_file = pathlib.Path(event.input.value)
+        if not self.cmd_file.exists():
+            self.cmd_file.write_text(self.cmd_text)
+        else:
+            self.cmd_text = self.cmd_file.read_text()
+        self.query_one("#cmd-window").text = self.cmd_text
+        self._debounce_timer.reset()
+
+    @on(Input.Blurred, "#output-file-input")
+    @on(Input.Submitted, "#output-file-input")
+    def set_output_file(self, event):
+        self.graphic_file = pathlib.Path(event.input.value)
+        self._debounce_timer.reset()
+
+    def set_graphic(self, file):
+        self.query_one("#graphic-window").image = file
+
+    @on(TextArea.Changed, "#input-window")
+    def reset_debounce_timer(self, event):
+        self._debounce_timer.reset()
+
+    @work()
+    async def generate_graphic(self):
+        self._debounce_timer.pause()
+        self.script_text = self.query_one("#input-window").text
+        if self.script_text == "":
+            return
+
+        self.cmd_text = self.query_one("#cmd-window").text
+
+        self.cmd_file.write_text(self.cmd_text)
+        os.chmod(self.cmd_file, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
+        self.script_file.write_text(self.script_text)
+        self.set_graphic(None)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self.cmd_file,
+                self.script_file,
+                self.graphic_file,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            stdout, _ = await proc.communicate()
+            self.query_one("#output-window").text = stdout.decode()
+        except subprocess.CalledProcessError:
+            pass
+
+        if (
+            proc.returncode == 0
+            and self.graphic_file.exists()
+            and os.path.getsize(self.graphic_file) > 0
+        ):
+            try:
+                self.query_one("#graphic-window").image = str(self.graphic_file)
+            except:
+                pass
+        else:
+            pass
+
+
+cmds = {
+    "gnuplot": """#! /bin/bash
+
+gnuplot -e "set term png; set output '${2}'; load '${1}'"
+""",
+    "tex2im": """#! /bin/bash
+
+tex2im "${1}" -o "${2}"
+""",
+    "custom": """#! /bin/bash
+SCRIPT_FILE="${1}"
+IMAGE_FILE="${2}"
+# insert command that will create an image named ${IMAGE_FILE}
+
+""",
+}
+
+
+class PviewApp(App):
+    def __init__(
+        self,
+    ):
+        super().__init__()
+        self.scratch_dir = pathlib.Path(tempfile.mkdtemp())
+        self.cmd_file = self.scratch_dir / "run"
+        self.script_file = self.scratch_dir / "in.txt"
+        self.graphic_file = self.scratch_dir / "out.png"
+
+        self.cmd_text = None
+        self.script_text = None
+
+    def compose(self):
+        self._debounce_time = 0.5
+        self._debounce_timer: Timer | None = None
+        yield Header()
+        with TabbedContent():
+            with AppTab("gnuplot", cmds["gnuplot"], "plot sin(x)"):
+                pass
+            with AppTab("tex2im", cmds["tex2im"], r"\div{\vec{E}} = \rho / \epsilon_0"):
+                pass
+
+
+def main() -> None:
+    # parser = argparse.ArgumentParser(
+    #     prog="pview",
+    #     description="Edit scripts for generating graphics and see the results in real-time.",
+    # )
+    # parser.add_argument("filename")
+
+    # args = parser.parse_args()
+
+    app = PviewApp()
+    app.run()
