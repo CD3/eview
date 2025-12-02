@@ -13,6 +13,7 @@ from textual.containers import (
     Container,
     Horizontal,
     HorizontalGroup,
+    ScrollableContainer,
     Vertical,
     VerticalGroup,
 )
@@ -36,8 +37,6 @@ class AppTab(TabPane):
     DEFAULT_CSS = """
 AppTab {
 AutoImage {
-width: auto;
-height: 50%;
 }
 }
 
@@ -81,24 +80,23 @@ height: 50%;
                     yield Input(id="cmd-file-input")
             with Vertical():
                 yield Label("Graphic")
-                yield AutoImage(id="graphic-window", classes="width-auto height-auto")
+                yield AutoImage(id="graphic-window")
                 yield Label("Output")
                 yield TextArea(id="output-window")
 
     def on_mount(self):
-        # if self.filepath.exists():
-        #     self.query_one("#input-window").text = self.filepath.read_text()
-
         self._debounce_timer = Timer(
             self, self._debounce_time, callback=self.generate_graphic
         )
-        self._debounce_timer._start()
 
         self.query_one("#cmd-window").text = self.cmd_text
         self.query_one("#input-window").text = self.script_text
         self.query_one("#input-file-input").value = str(self.script_file)
         self.query_one("#output-file-input").value = str(self.graphic_file)
         self.query_one("#cmd-file-input").value = str(self.cmd_file)
+
+    def on_show(self):
+        self._debounce_timer._start()
 
     @on(Input.Blurred, "#input-file-input")
     @on(Input.Submitted, "#input-file-input")
@@ -126,7 +124,7 @@ height: 50%;
         self._debounce_timer.reset()
 
     def set_cmd_file(self, filename):
-        self.cmd_file = pathlib.Path(fielname)
+        self.cmd_file = pathlib.Path(filename)
         if not self.cmd_file.exists():
             self.cmd_file.write_text(self.cmd_text)
         else:
