@@ -61,23 +61,29 @@ width: auto;
     def compose(self):
         self._debounce_time = 0.5
         self._debounce_timer: Timer | None = None
-        with Collapsible(title="Cmd"):
+        with Collapsible(title="Command"):
             yield TextArea.code_editor(text="", id="cmd-window")
 
         with Horizontal():
             with Vertical():
                 yield Label("Script")
-                yield TextArea.code_editor(id="input-window")
+                yield TextArea.code_editor(id="script-window")
                 with VerticalGroup():
                     yield Static(f"Scratch Folder: {self.scratch_dir}")
                 with VerticalGroup():
-                    yield Label("Input File")
-                    yield Input(id="input-file-input")
+                    yield Label(
+                        "Script File",
+                    )
+                    yield Input(id="script-file-input")
                 with VerticalGroup():
-                    yield Label("Output File")
-                    yield Input(id="output-file-input")
+                    yield Label(
+                        "Graphic File",
+                    )
+                    yield Input(id="graphic-file-input")
                 with VerticalGroup():
-                    yield Label("Cmd File")
+                    yield Label(
+                        "Command File",
+                    )
                     yield Input(id="cmd-file-input")
             with VerticalGroup():
                 yield Label("Graphic")
@@ -91,37 +97,53 @@ width: auto;
         )
 
         self.query_one("#cmd-window").text = self.cmd_text
-        self.query_one("#input-window").text = self.script_text
-        self.query_one("#input-file-input").value = str(self.script_file)
-        self.query_one("#output-file-input").value = str(self.graphic_file)
+        self.query_one("#script-window").text = self.script_text
+        self.query_one("#script-file-input").value = str(self.script_file)
+        self.query_one("#graphic-file-input").value = str(self.graphic_file)
         self.query_one("#cmd-file-input").value = str(self.cmd_file)
+        self.query_one(
+            "#script-file-input"
+        ).tooltip = "Name of the file that the script will be written to. By default, the script will be written to a temporary directory, but this can be changed to load and save from a different location."
+        self.query_one(
+            "#graphic-file-input"
+        ).tooltip = "Name of the image file that will be generated."
+        self.query_one(
+            "#cmd-file-input"
+        ).tooltip = "Name of the command script (the script that generates the image file from the script file) that will be written and excecuted to process the script and generate the image file."
+
+        self.query_one(
+            "#cmd-window"
+        ).tooltip = "This script is used to process the input script and produce the graphic file. It will be passed two arguments. The first argument is the name of the input script, eview writes and updates then file as the user edits the script. The second argument is the name of the graphic file that should be generated."
+        self.query_one(
+            "#script-window"
+        ).tooltip = "Edit the input script here. This script will be saved and processed to generate the graphic file."
 
     def on_show(self):
         self._debounce_timer._start()
 
-    @on(Input.Blurred, "#input-file-input")
-    @on(Input.Submitted, "#input-file-input")
-    def _set_input_file(self, event):
-        self.set_input_file(event.input.value)
+    @on(Input.Blurred, "#script-file-input")
+    @on(Input.Submitted, "#script-file-input")
+    def _set_script_file(self, event):
+        self.set_script_file(event.input.value)
 
     @on(Input.Blurred, "#cmd-file-input")
     @on(Input.Submitted, "#cmd-file-input")
     def _set_cmd_file(self, event):
         self.set_cmd_file(event.input.value)
 
-    @on(Input.Blurred, "#output-file-input")
-    @on(Input.Submitted, "#output-file-input")
-    def _set_output_file(self, event):
-        self.set_output_file(event.input.value)
+    @on(Input.Blurred, "#graphic-file-input")
+    @on(Input.Submitted, "#graphic-file-input")
+    def _set_graphic_file(self, event):
+        self.set_graphic_file(event.input.value)
 
-    def set_input_file(self, filename):
+    def set_script_file(self, filename):
         self.script_file = pathlib.Path(filename)
         if not self.script_file.exists():
             self.script_file.write_text(self.script_text)
         else:
             self.script_text = self.script_file.read_text()
-        self.query_one("#input-window").text = self.script_text
-        self.query_one("#input-file-input").value = str(self.script_file)
+        self.query_one("#script-window").text = self.script_text
+        self.query_one("#script-file-input").value = str(self.script_file)
         self._debounce_timer.reset()
 
     def set_cmd_file(self, filename):
@@ -134,15 +156,15 @@ width: auto;
         self.query_one("#cmd-file-input").value = str(self.cmd_file)
         self._debounce_timer.reset()
 
-    def set_output_file(self, filename):
+    def set_graphic_file(self, filename):
         self.graphic_file = pathlib.Path(filename)
-        self.query_one("#output-file-input").value = str(self.graphic_file)
+        self.query_one("#graphic-file-input").value = str(self.graphic_file)
         self._debounce_timer.reset()
 
     def set_graphic(self, file):
         self.query_one("#graphic-window").image = file
 
-    @on(TextArea.Changed, "#input-window")
+    @on(TextArea.Changed, "#script-window")
     @on(TextArea.Changed, "#cmd-window")
     def reset_debounce_timer(self, event):
         self._debounce_timer.reset()
@@ -150,7 +172,7 @@ width: auto;
     @work()
     async def generate_graphic(self):
         self._debounce_timer.pause()
-        self.script_text = self.query_one("#input-window").text
+        self.script_text = self.query_one("#script-window").text
         if self.script_text == "":
             return
 
@@ -163,17 +185,20 @@ width: auto;
         self.query_one("#output-window").text = "Running..."
         try:
             proc = await asyncio.create_subprocess_exec(
-                self.cmd_file,
-                self.script_file,
-                self.graphic_file,
+                str(self.cmd_file),
+                str(self.script_file),
+                str(self.graphic_file),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,
             )
             stdout, _ = await proc.communicate()
             self.query_one("#output-window").text = stdout.decode()
-        except subprocess.CalledProcessError:
-            self.query_one("#output-window").text = "Failed!"
+        except subprocess.CalledProcessError as e:
+            self.query_one("#output-window").text = "Failed!" + "\n\n" + str(e)
             pass
+        except Exception as e:
+            self.query_one("#output-window").text = "Failed!" + "\n\n" + str(e)
+            return
 
         if (
             proc.returncode == 0
@@ -244,8 +269,29 @@ bash ${SCRIPT_FILE}
 echo "Hello World!"
 """
 
+    class python:
+        class matplotlib:
+            cmd = r"""#! /usr/bin/env python
+#! /usr/bin/env -S uv --script
+import matplotlib.pyplot as plt
+import sys, pathlib
+SCRIPT_FILE = sys.argv[1]
+GRAPHIC_FILE = sys.argv[2]
 
-class PviewApp(App):
+exec(pathlib.Path(SCRIPT_FILE).read_text())
+
+plt.savefig(GRAPHIC_FILE)
+"""
+            script = r"""
+plt.plot([0, 1, 2, 3], [0, 1, 4, 9])
+plt.xlabel("X-axis")
+plt.ylabel("Y-axis")
+plt.title("Sample Plot")
+
+"""
+
+
+class EviewApp(App):
     def __init__(self, filename):
         super().__init__()
         self.filename = pathlib.Path(filename) if filename is not None else None
@@ -275,6 +321,15 @@ class PviewApp(App):
                         id="tex2im-tikz-tab",
                     ):
                         pass
+            with TabPane("python", id="python-tab"):
+                with TabbedContent(id="python-tab-group") as tc:
+                    with AppTab(
+                        "matplotlib",
+                        Viewers.python.matplotlib.cmd,
+                        Viewers.python.matplotlib.script,
+                        id="python-matplotlib-tab",
+                    ):
+                        pass
             with AppTab(
                 "custom",
                 Viewers.custom.cmd,
@@ -286,11 +341,11 @@ class PviewApp(App):
     def on_mount(self):
         if self.filename is not None:
             if self.filename.suffix in [".gp", ".gnuplot"]:
-                self.query_one("#gnuplot-tab").set_input_file(self.filename)
+                self.query_one("#gnuplot-tab").set_script_file(self.filename)
                 self.query_one("#main-tab-group").active = "gnuplot-tab"
 
             if self.filename.suffix in [".tex"]:
-                self.query_one("#tex2im-math-tab").set_input_file(self.filename)
+                self.query_one("#tex2im-math-tab").set_script_file(self.filename)
                 self.query_one("#main-tab-group").active = "tex2im-tab"
                 self.query_one("#tex2im-tab-group").active = "tex2im-math-tab"
 
@@ -304,5 +359,5 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    app = PviewApp(args.filename)
+    app = EviewApp(args.filename)
     app.run()
