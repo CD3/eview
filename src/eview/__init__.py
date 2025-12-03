@@ -69,8 +69,7 @@ width: auto;
                 yield Label("Script")
                 yield TextArea.code_editor(id="input-window")
                 with VerticalGroup():
-                    yield Label("Scatch Folder")
-                    yield Static(str(self.scratch_dir))
+                    yield Static(f"Scratch Folder: {self.scratch_dir}")
                 with VerticalGroup():
                     yield Label("Input File")
                     yield Input(id="input-file-input")
