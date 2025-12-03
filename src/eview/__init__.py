@@ -246,7 +246,7 @@ class PviewApp(App):
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="pview",
+        prog="eview",
         description="Edit scripts for generating graphics and see the results in real-time.",
     )
     parser.add_argument("filename", nargs="?")

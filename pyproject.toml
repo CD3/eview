@@ -3,7 +3,7 @@ build-backend = "hatchling.build"
 requires = [ "hatchling" ]
 
 [project]
-name = "pview"
+name = "eview"
 version = "0.1.0"
 description = "Preview various kinds of text files used to generate images."
 readme = "README.md"
@@ -23,7 +23,7 @@ dependencies = [
   "textual-imageview>=0.1.1",
 ]
 
-scripts.pview = "pview:main"
+scripts.eview = "eview:main"
 
 [dependency-groups]
 dev = [
