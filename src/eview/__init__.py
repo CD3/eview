@@ -37,6 +37,8 @@ class AppTab(TabPane):
     DEFAULT_CSS = """
 AppTab {
 AutoImage {
+height: auto; 
+width: auto; 
 }
 }
 
@@ -78,7 +80,7 @@ AutoImage {
                 with VerticalGroup():
                     yield Label("Cmd File")
                     yield Input(id="cmd-file-input")
-            with Vertical():
+            with VerticalGroup():
                 yield Label("Graphic")
                 yield AutoImage(id="graphic-window")
                 yield Label("Output")
@@ -142,9 +144,6 @@ AutoImage {
         self.query_one("#graphic-window").image = file
 
     @on(TextArea.Changed, "#input-window")
-    def reset_debounce_timer(self, event):
-        self._debounce_timer.reset()
-
     @on(TextArea.Changed, "#cmd-window")
     def reset_debounce_timer(self, event):
         self._debounce_timer.reset()
@@ -162,6 +161,7 @@ AutoImage {
         os.chmod(self.cmd_file, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
         self.script_file.write_text(self.script_text)
         self.set_graphic(None)
+        self.query_one("#output-window").text = "Running..."
         try:
             proc = await asyncio.create_subprocess_exec(
                 self.cmd_file,
@@ -173,6 +173,7 @@ AutoImage {
             stdout, _ = await proc.communicate()
             self.query_one("#output-window").text = stdout.decode()
         except subprocess.CalledProcessError:
+            self.query_one("#output-window").text = "Failed!"
             pass
 
         if (
@@ -194,8 +195,26 @@ cmds = {
 gnuplot -e "set term png; set output '${2}'; load '${1}'"
 """,
     "tex2im": """#! /bin/bash
+# some useful options
+# -B INT : set border width in pixels
+# -n :     don't insert equation environment (for non-math latex images)
+# -t :     text color
+# -b :     background color
+# -z :     transparent background
+
 
 tex2im "${1}" -o "${2}"
+""",
+    "tex2im:tikz": """#! /bin/bash
+# some useful options
+# -B INT : set border width in pixels
+# -n :     don't insert equation environment (for non-math latex images)
+# -t :     text color
+# -b :     background color
+# -z :     transparent background
+
+
+tex2im -n -B 10 "${1}" -o "${2}"
 """,
     "custom": """#! /bin/bash
 SCRIPT_FILE="${1}"
@@ -218,13 +237,22 @@ class PviewApp(App):
         with TabbedContent():
             with AppTab("gnuplot", cmds["gnuplot"], "plot sin(x)", id="gnuplot-tab"):
                 pass
-            with AppTab(
-                "tex2im",
-                cmds["tex2im"],
-                r"\div{\vec{E}} = \rho / \epsilon_0",
-                id="tex2im-tab",
-            ):
-                pass
+            with TabPane("tex2im"):
+                with TabbedContent("tex2im") as tc:
+                    with AppTab(
+                        "math",
+                        cmds["tex2im"],
+                        r"\div{\vec{E}} = \rho / \epsilon_0",
+                        id="tex2im-math-tab",
+                    ):
+                        pass
+                    with AppTab(
+                        "tikz",
+                        cmds["tex2im"],
+                        r"\begin",
+                        id="tex2im-tikz-tab",
+                    ):
+                        pass
             with AppTab(
                 "custom",
                 cmds["custom"],
@@ -240,8 +268,8 @@ class PviewApp(App):
                 self.query_one(TabbedContent).active = "gnuplot-tab"
 
             if self.filename.suffix in [".tex"]:
-                self.query_one("#tex2im-tab").set_input_file(self.filename)
-                self.query_one(TabbedContent).active = "tex2im-tab"
+                self.query_one("#tex2im-math-tab").set_input_file(self.filename)
+                self.query_one(TabbedContent).active = "tex2im-math-tab"
 
 
 def main() -> None:
