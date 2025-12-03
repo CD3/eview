@@ -189,23 +189,34 @@ width: auto;
             pass
 
 
-cmds = {
-    "gnuplot": """#! /bin/bash
+class Viewers:
+    class gnuplot:
+        cmd = r"""#! /bin/bash
 
 gnuplot -e "set term png; set output '${2}'; load '${1}'"
-""",
-    "tex2im": """#! /bin/bash
+"""
+        script = r"""
+plot sin(x)
+"""
+
+    class tex2im:
+        class math:
+            cmd = r"""#! /bin/bash
 # some useful options
 # -B INT : set border width in pixels
 # -n :     don't insert equation environment (for non-math latex images)
 # -t :     text color
 # -b :     background color
 # -z :     transparent background
-
 
 tex2im "${1}" -o "${2}"
-""",
-    "tex2im:tikz": """#! /bin/bash
+"""
+            script = r"""
+\div{\vec{E}} = \rho / \epsilon_0
+"""
+
+        class tikz:
+            cmd = r"""#! /bin/bash
 # some useful options
 # -B INT : set border width in pixels
 # -n :     don't insert equation environment (for non-math latex images)
@@ -213,16 +224,26 @@ tex2im "${1}" -o "${2}"
 # -b :     background color
 # -z :     transparent background
 
-
 tex2im -n -B 10 "${1}" -o "${2}"
-""",
-    "custom": """#! /bin/bash
+"""
+
+            script = str(r"""
+\begin{tikzpicture}
+\draw (0,0) -- (1,1)
+\end{tikzpicture}
+""")
+
+    class custom:
+        cmd = r"""#! /bin/bash
 SCRIPT_FILE="${1}"
 IMAGE_FILE="${2}"
 # insert command that will create an image named ${IMAGE_FILE}
-
-""",
-}
+bash ${SCRIPT_FILE}
+"""
+        script = r"""
+# Edit command script to process this file and then edit this file.
+echo "Hello World!"
+"""
 
 
 class PviewApp(App):
@@ -234,29 +255,31 @@ class PviewApp(App):
         self._debounce_time = 0.5
         self._debounce_timer: Timer | None = None
         yield Header()
-        with TabbedContent():
-            with AppTab("gnuplot", cmds["gnuplot"], "plot sin(x)", id="gnuplot-tab"):
+        with TabbedContent(id="main-tab-group"):
+            with AppTab(
+                "gnuplot", Viewers.gnuplot.cmd, Viewers.gnuplot.script, id="gnuplot-tab"
+            ):
                 pass
-            with TabPane("tex2im"):
-                with TabbedContent("tex2im") as tc:
+            with TabPane("tex2im", id="tex2im-tab"):
+                with TabbedContent(id="tex2im-tab-group") as tc:
                     with AppTab(
                         "math",
-                        cmds["tex2im"],
-                        r"\div{\vec{E}} = \rho / \epsilon_0",
+                        Viewers.tex2im.math.cmd,
+                        Viewers.tex2im.math.script,
                         id="tex2im-math-tab",
                     ):
                         pass
                     with AppTab(
                         "tikz",
-                        cmds["tex2im"],
-                        r"\begin",
+                        Viewers.tex2im.tikz.cmd,
+                        Viewers.tex2im.tikz.script,
                         id="tex2im-tikz-tab",
                     ):
                         pass
             with AppTab(
                 "custom",
-                cmds["custom"],
-                r"Edit command script to process this file and then edit this file.",
+                Viewers.custom.cmd,
+                Viewers.custom.script,
                 id="custom-tab",
             ):
                 pass
@@ -265,11 +288,12 @@ class PviewApp(App):
         if self.filename is not None:
             if self.filename.suffix in [".gp", ".gnuplot"]:
                 self.query_one("#gnuplot-tab").set_input_file(self.filename)
-                self.query_one(TabbedContent).active = "gnuplot-tab"
+                self.query_one("#main-tab-group").active = "gnuplot-tab"
 
             if self.filename.suffix in [".tex"]:
                 self.query_one("#tex2im-math-tab").set_input_file(self.filename)
-                self.query_one(TabbedContent).active = "tex2im-math-tab"
+                self.query_one("#main-tab-group").active = "tex2im-tab"
+                self.query_one("#tex2im-tab-group").active = "tex2im-math-tab"
 
 
 def main() -> None:
