@@ -2,7 +2,7 @@
 
 Edit text files that are used to generate images.
 
-`eview` is a simple app for editing text files and viewing the results. I is useful for developing gnuplot scripts, latex snippets, and more.
+`eview` is a simple [textual](https://textual.textualize.io/) app for editing text files and viewing the results. I is useful for developing gnuplot scripts, latex snippets, and more.
 
 ![](./doc/gnuplot-tab.png)
 
