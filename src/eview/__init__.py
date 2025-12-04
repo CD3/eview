@@ -17,8 +17,10 @@ from textual.containers import (
     Vertical,
     VerticalGroup,
 )
+from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import (
+    Button,
     Collapsible,
     Footer,
     Header,
@@ -30,7 +32,33 @@ from textual.widgets import (
     TabPane,
     TextArea,
 )
+from textual_fspicker import FileOpen
 from textual_image.widget import AutoImage
+
+
+class SaveScreen(Screen):
+    DEFAULT_CSS = """
+Horizontal {
+align: right top;
+}
+"""
+
+    def compose(self):
+        with VerticalGroup():
+            yield Label("Name")
+            yield Input(id="name")
+            with Horizontal(id="buttons"):
+                yield Button("Cancel", id="cancel")
+                yield Button("OK", id="ok")
+
+    def on_button_pressed(self, event):
+        if event.button.id == "ok":
+            name = self.query_one("#name").value
+            script_file = pathlib.Path(name)
+
+            self.app.get_active_tab().set_files(script_file)
+
+        self.app.pop_screen()
 
 
 class AppTab(TabPane):
@@ -41,7 +69,6 @@ height: auto;
 width: auto; 
 }
 }
-
 """
 
     def __init__(self, title, cmd_text, script_text, id):
@@ -161,6 +188,15 @@ width: auto;
         self.query_one("#graphic-file-input").value = str(self.graphic_file)
         self._debounce_timer.reset()
 
+    def set_files(self, script_filename):
+        script_file = pathlib.Path(script_filename)
+        cmd_file = script_file.with_suffix(".run")
+        graphic_file = script_file.with_suffix(".png")
+
+        self.set_script_file(script_file)
+        self.set_cmd_file(cmd_file)
+        self.set_graphic_file(graphic_file)
+
     def set_graphic(self, file):
         self.query_one("#graphic-window").image = file
 
@@ -185,7 +221,7 @@ width: auto;
         self.query_one("#output-window").text = "Running..."
         try:
             proc = await asyncio.create_subprocess_exec(
-                str(self.cmd_file),
+                str(self.cmd_file.absolute()),
                 str(self.script_file),
                 str(self.graphic_file),
                 stdout=asyncio.subprocess.PIPE,
@@ -257,6 +293,17 @@ tex2im -n -B 10 "${1}" -o "${2}"
 \end{tikzpicture}
 """)
 
+    class typst:
+        cmd = r"""#! /bin/bash
+TMPFILE=__eview_typst_tmp.png
+typst compile --ppi 300 --format png "${1}" "${TMPFILE}"
+convert -trim -border 5 -density 150x150 "${TMPFILE}" "${2}"
+rm "${TMPFILE}"
+"""
+        script = r"""
+y = mx + b
+"""
+
     class custom:
         cmd = r"""#! /bin/bash
 SCRIPT_FILE="${1}"
@@ -292,6 +339,11 @@ plt.title("Sample Plot")
 
 
 class EviewApp(App):
+    BINDINGS = [
+        ("s", "save", "Save"),
+        ("o", "open", "Open"),
+    ]
+
     def __init__(self, filename):
         super().__init__()
         self.filename = pathlib.Path(filename) if filename is not None else None
@@ -331,23 +383,52 @@ class EviewApp(App):
                     ):
                         pass
             with AppTab(
+                "typst",
+                Viewers.typst.cmd,
+                Viewers.typst.script,
+                id="typst-tab",
+            ):
+                pass
+            with AppTab(
                 "custom",
                 Viewers.custom.cmd,
                 Viewers.custom.script,
                 id="custom-tab",
             ):
                 pass
+        yield Footer()
 
     def on_mount(self):
         if self.filename is not None:
             if self.filename.suffix in [".gp", ".gnuplot"]:
-                self.query_one("#gnuplot-tab").set_script_file(self.filename)
-                self.query_one("#main-tab-group").active = "gnuplot-tab"
+                active_tab = "gnuplot-tab"
+                self.query_one("#main-tab-group").active = active_tab
 
             if self.filename.suffix in [".tex"]:
-                self.query_one("#tex2im-math-tab").set_script_file(self.filename)
+                active_tab = "tex2im-math-tab"
                 self.query_one("#main-tab-group").active = "tex2im-tab"
-                self.query_one("#tex2im-tab-group").active = "tex2im-math-tab"
+                self.query_one("#tex2im-tab-group").active = active_tab
+
+            if self.filename.suffix in [".typ"]:
+                active_tab = "typst-tab"
+                self.query_one("#main-tab-group").active = active_tab
+
+            active_tab = self.query_one(f"#{active_tab}")
+            active_tab.set_files(self.filename)
+
+    def action_save(self):
+        self.push_screen(SaveScreen())
+
+    def get_active_tab(self):
+        for tab in self.query(AppTab):
+            tg_id = tab.parent.parent.id
+            if self.query_one(f"#{tg_id}").active == tab.id:
+                return tab
+
+    @work()
+    async def action_open(self):
+        result = await self.push_screen_wait(FileOpen())
+        self.get_active_tab().set_files(result)
 
 
 def main() -> None:
