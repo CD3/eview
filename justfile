@@ -7,6 +7,6 @@ setup:
 test:
     uv run pytest
 
-uv publish:
+publish:
     uv build
     uv publish
