@@ -22,6 +22,7 @@ dependencies = [
   "textual-fspicker>=0.6.0",
   "textual-image>=0.8.4",
   "textual-imageview>=0.1.1",
+  "watchdog>=6.0.0",
 ]
 
 scripts.eview = "eview:main"

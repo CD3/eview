@@ -17,6 +17,7 @@ from textual.containers import (
     Vertical,
     VerticalGroup,
 )
+from textual.message import Message
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import (
@@ -34,6 +35,26 @@ from textual.widgets import (
 )
 from textual_fspicker import FileOpen
 from textual_image.widget import AutoImage
+from watchdog.events import FileSystemEventHandler
+from watchdog.observers import Observer
+
+
+# Creating a textual message to notify when
+# a file has been modified.
+class FileModified(Message):
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__()
+
+
+# Create a Watchdog event handler that sends
+# Textual messages when a file modied event is recieved.
+class TexualFileSystemEventHandler(FileSystemEventHandler):
+    def __init__(self, app):
+        self.app = app
+
+    def on_modified(self, event):
+        self.app.post_message(FileModified(event.src_path))
 
 
 class SaveScreen(Screen):
@@ -96,7 +117,10 @@ width: auto;
                 yield Label("Script")
                 yield TextArea.code_editor(id="script-window")
                 with VerticalGroup():
-                    yield Static(f"Scratch Folder: {self.scratch_dir}")
+                    yield Static(f"Scratch Directory: {self.scratch_dir}")
+                    yield Static(
+                        f"Current Working Directory: {pathlib.Path('.').absolute()}"
+                    )
                 with VerticalGroup():
                     yield Label(
                         "Script File",
@@ -145,8 +169,22 @@ width: auto;
             "#script-window"
         ).tooltip = "Edit the input script here. This script will be saved and processed to generate the graphic file."
 
+        self._script_file_change_handler = TexualFileSystemEventHandler(self)
+        self._script_file_observer = Observer()
+        self._script_file_observer.start()
+        self._script_file_write = True
+
+    def on_unmount(self):
+        self._script_file_observer.stop()
+        self._script_file_observer.join()
+
     def on_show(self):
         self._debounce_timer._start()
+
+    def on_file_modified(self, message: FileModified):
+        if message.path == str(self.script_file.absolute()):
+            self._script_file_write = False
+            self._load_script_text()
 
     @on(Input.Blurred, "#script-file-input")
     @on(Input.Submitted, "#script-file-input")
@@ -163,6 +201,11 @@ width: auto;
     def _set_graphic_file(self, event):
         self.set_graphic_file(event.input.value)
 
+    def _load_script_text(self):
+        if self.script_file.exists():
+            self.script_text = self.script_file.read_text()
+        self.query_one("#script-window").text = self.script_text
+
     def set_script_file(self, filename):
         self.script_file = pathlib.Path(filename)
         if not self.script_file.exists():
@@ -172,6 +215,10 @@ width: auto;
         self.query_one("#script-window").text = self.script_text
         self.query_one("#script-file-input").value = str(self.script_file)
         self._debounce_timer.reset()
+
+        self._script_file_observer.schedule(
+            self._script_file_change_handler, self.script_file.parent
+        )
 
     def set_cmd_file(self, filename):
         self.cmd_file = pathlib.Path(filename)
@@ -208,6 +255,7 @@ width: auto;
     @work()
     async def generate_graphic(self):
         self._debounce_timer.pause()
+
         self.script_text = self.query_one("#script-window").text
         if self.script_text == "":
             return
@@ -216,7 +264,9 @@ width: auto;
 
         self.cmd_file.write_text(self.cmd_text)
         os.chmod(self.cmd_file, stat.S_IXUSR | stat.S_IRUSR | stat.S_IWUSR)
-        self.script_file.write_text(self.script_text)
+        if self._script_file_write:
+            self.script_file.write_text(self.script_text)
+        self._script_file_write = True
         self.set_graphic(None)
         self.query_one("#output-window").text = "Running..."
         try:
