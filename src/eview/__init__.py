@@ -303,7 +303,9 @@ class Viewers:
     class gnuplot:
         cmd = r"""#! /bin/bash
 
-gnuplot -e "set term png; set output '${2}'; load '${1}'"
+INPUT=${1:-$(basename ${0} .run).gnuplot}
+OUTPUT=${2:-$(basename ${0} .run).png}
+timeout 1 gnuplot -e "set term png; set output '${OUTPUT}'; load '${INPUT}'" || echo "`gnuplot` command timed out after 1. You can increase the timeout time in the run script."
 """
         script = r"""
 plot sin(x)
@@ -319,7 +321,9 @@ plot sin(x)
 # -b :     background color
 # -z :     transparent background
 
-tex2im "${1}" -o "${2}"
+INPUT=${1:-$(basename ${0} .run).tex}
+OUTPUT=${2:-$(basename ${0} .run).png}
+tex2im "${INPUT}" -o "${OUTPUT}"
 """
             script = r"""
 \div{\vec{E}} = \rho / \epsilon_0
@@ -334,7 +338,9 @@ tex2im "${1}" -o "${2}"
 # -b :     background color
 # -z :     transparent background
 
-tex2im -n -B 10 "${1}" -o "${2}"
+INPUT=${1:-$(basename ${0} .run).tex}
+OUTPUT=${2:-$(basename ${0} .run).png}
+tex2im -n -B 10 "${INPUT}" -o "${OUTPUT}"
 """
 
             script = str(r"""
@@ -345,9 +351,11 @@ tex2im -n -B 10 "${1}" -o "${2}"
 
     class typst:
         cmd = r"""#! /bin/bash
+INPUT=${1:-$(basename ${0} .run).typ}
+OUTPUT=${2:-$(basename ${0} .run).png}
 TMPFILE=__eview_typst_tmp.png
-typst compile --ppi 300 --format png "${1}" "${TMPFILE}"
-convert -trim -border 5 -density 150x150 "${TMPFILE}" "${2}"
+typst compile --ppi 300 --format png "${INPUT}" "${TMPFILE}"
+convert -trim -border 5 -density 150x150 "${TMPFILE}" "${OUTPUT}"
 rm "${TMPFILE}"
 """
         script = r"""
@@ -356,14 +364,17 @@ y = mx + b
 
     class custom:
         cmd = r"""#! /bin/bash
-SCRIPT_FILE="${1}"
-IMAGE_FILE="${2}"
-# insert command that will create an image named ${IMAGE_FILE}
-bash ${SCRIPT_FILE}
+SCRIPT_FILE=${1}
+GRAPHIC_FILE=${2}
+# Insert command that will create an image named ${GRAPHIC_FILE}
+# This example runs script file as a bash script passing the graphics filename as an argument.
+bash ${SCRIPT_FILE} ${GRAPHIC_FILE}
 """
         script = r"""
 # Edit command script to process this file and then edit this file.
+# Graphics filename is passes as an argument by the run script.
 echo "Hello World!"
+echo "Creating ${1}"
 """
 
     class python:
