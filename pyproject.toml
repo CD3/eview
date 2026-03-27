@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "eview"
-version = "0.1.0"
+version = "0.2.0"
 description = "Preview various kinds of text files used to generate images."
 readme = "README.md"
 authors = [
@@ -19,18 +19,17 @@ classifiers = [
 ]
 dependencies = [
   "textual>=6.7",
-  "textual-fspicker>=0.6.0",
+  "textual-fspicker>=0.6",
   "textual-image>=0.8.4",
   "textual-imageview>=0.1.1",
-  "watchdog>=6.0.0",
+  "watchdog>=6",
 ]
-
 scripts.eview = "eview:main"
 
 [dependency-groups]
 dev = [
   "matplotlib>=3.10.7",
   "pytest>=9.0.1",
-  "pytest-textual-snapshot>=1.0.0",
+  "pytest-textual-snapshot>=1",
   "textual-dev>=1.8",
 ]
